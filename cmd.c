@@ -26,18 +26,29 @@ param cmd_params[] =
     {"v",   &pwm_v}
 };
 
-char cmd_text[CMD_LEN];
+/* The current command */
+char   cmd_text[CMD_LEN];
 size_t cmd_ind = 0;
 
-static void cmd_char(char c);
-static void cmd_run(char *cmd);
-static char *cmd_word_split(char *s);
-static void cmd_run_get(char *s);
-static void cmd_run_set(char *s);
+/* Buffer up a character for the next command */
+static void  cmd_char       (char  c);
+/* Runs the command buffered up */
+static void  cmd_run        (char *cmd);
+
+/* Replace the next space in a string with \0, and return the remainder *
+ *                                 "abra\0cadabra"                      *
+ * e.g. cmd_word_split("abra cadabra") ---^                             */
+static char *cmd_word_split (char *s);
+
+/* Functions for each command. Each takes the arguments of the command */
+static void  cmd_run_get    (char *s); /* get [param]         -> ok [value] */
+static void  cmd_run_set    (char *s); /* set [param] [value] -> ok         */
 
 static void cmd_char(char c)
 {
+    /* Ignore newlines, they may or may not be sent */
     if      (c == '\n') return;
+    /* \r is a delimiter for lines and thus commands */
     else if (c == '\r')
     {
         cmd_text[cmd_ind] = '\0';
@@ -47,6 +58,7 @@ static void cmd_char(char c)
     }
     else
     {
+        /* No more characters if we run out of space */
         if (cmd_ind == CMD_LEN - 1)
             return;
         else
@@ -57,10 +69,13 @@ static void cmd_char(char c)
 static void cmd_run(char *s)
 {
     char *args;
+
+    /* Split the arguments from the command in the first word */
     args = cmd_word_split(s);
-    if (strcmp(s, "set")==0)
+
+    if      (strcmp(s, "set") == 0)
         cmd_run_set(args);
-    else if (strcmp(s, "get") ==0)
+    else if (strcmp(s, "get") == 0)
         cmd_run_get(args);
     else
         uart_str("err cmd\r\n");
@@ -85,16 +100,21 @@ param *cmd_get_param(char *name)
 {
     size_t ind;
 
+    /* Iterate across all params until one is found */
     for (ind = 0;
          ind < sizeof(cmd_params)/sizeof(param);
          ind++)
     {
         param *p;
+
         p = &cmd_params[ind];
+
+        /* Return it if it is found */
         if (strcmp(p->name, name) == 0)
             return p;
     }
 
+    /* If no param is found, send an error */
     cli();
     uart_str("err prm\r\n");
     sei();
@@ -113,6 +133,7 @@ static void cmd_run_get(char *s)
 
     cli();
 
+    /* Convert the float to a string */
     dtostre(*(p->val), val, 4, 0);
 
     uart_str("ok ");
@@ -128,8 +149,10 @@ static void cmd_run_set(char *s)
     char *valstr;
     float val;
 
+    /* Try and get a second argument */
     valstr = cmd_word_split(s);
 
+    /* Print an error if there is not one */
     if (valstr == NULL)
     {
         cli();
@@ -145,9 +168,9 @@ static void cmd_run_set(char *s)
     if (!p) return;
 
     cli();
-    uart_str("ok");
+    /* Set the value and give an ok */
     *(p->val) = val;
-    uart_str("\r\n");
+    uart_str("ok\r\n");
     sei();
 }
 
@@ -155,6 +178,7 @@ void cmd_update(void)
 {
     int8_t c;
 
+    /* Read from the rx buffer until it's empty */
     for (;;)
     {
         cli();
