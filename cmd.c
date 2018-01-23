@@ -5,10 +5,10 @@
 #include <stdlib.h>
 
 #include "com.h"
+#include "pwm.h"
 
 #include "cmd.h"
 
-float pwm_kp, pwm_ki, pwm_kd, pwm_v;
 
 typedef struct param_s param;
 
@@ -20,10 +20,13 @@ struct param_s
 
 param cmd_params[] =
 {
-    {"k_p", &pwm_kp},
-    {"k_i", &pwm_ki},
-    {"k_d", &pwm_kd},
-    {"v",   &pwm_v}
+    {"k_p",   &pwm_kp},
+    {"k_i",   &pwm_ki},
+    {"k_d",   &pwm_kd},
+    {"v",     &pwm_v},
+    {"delp",  &pwm_slope_lowpass_weight},
+    {"adcr",  &pwm_adc_ref},
+    {"vdiv",  &pwm_voltage_div}
 };
 
 /* The current command */
@@ -43,6 +46,7 @@ static char *cmd_word_split (char *s);
 /* Functions for each command. Each takes the arguments of the command */
 static void  cmd_run_get    (char *s); /* get [param]         -> ok [value] */
 static void  cmd_run_set    (char *s); /* set [param] [value] -> ok         */
+static void  cmd_run_all    (void);    /* all  -> [param]: [value]... ok */
 
 static void cmd_char(char c)
 {
@@ -77,6 +81,8 @@ static void cmd_run(char *s)
         cmd_run_set(args);
     else if (strcmp(s, "get") == 0)
         cmd_run_get(args);
+    else if (strcmp(s, "all") == 0)
+        cmd_run_all();
     else
         uart_str("err cmd\r\n");
 }
@@ -136,9 +142,8 @@ static void cmd_run_get(char *s)
     /* Convert the float to a string */
     dtostre(*(p->val), val, 4, 0);
 
-    uart_str("ok ");
     uart_str(val);
-    uart_str("\r\n");
+    uart_str("\r\nok\r\n");
 
     sei();
 }
@@ -174,6 +179,30 @@ static void cmd_run_set(char *s)
     sei();
 }
 
+static void cmd_run_all(void)
+{
+    size_t ind;
+
+    /* Iterate across all params until one is found */
+    for (ind = 0;
+         ind < sizeof(cmd_params)/sizeof(param);
+         ind++)
+    {
+        param *p;
+        char   val[20];
+
+        p = &cmd_params[ind];
+        dtostre(*(p->val), val, 4, 0);
+
+        uart_str(p->name);
+        uart_str(": ");
+        uart_str(val);
+        uart_str("\r\n");
+    }
+
+    uart_str("ok\r\n");
+}
+
 void cmd_update(void)
 {
     int8_t c;
@@ -192,6 +221,7 @@ void cmd_update(void)
 int main(void)
 {
     uart_init();
+    pwm_init();
     sei();
 
     DDRB |= 1<<7;
